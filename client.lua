@@ -1,38 +1,8 @@
-local Velocity = 20.0
-
-local Animations = {
-	idle = {dict = "mech_weapons_thrown@base", name = "grip_idle", flag = 25},
-	idleWalking = {dict = "mech_weapons_thrown@base", name = "grip_walk", flag = 25},
-	aimingLow = {dict = "mech_weapons_thrown@base", name = "aim_l", flag = 25},
-	aimingMed = {dict = "mech_weapons_thrown@base", name = "aim_m", flag = 25},
-	aimingHigh = {dict = "mech_weapons_thrown@base", name = "aim_h", flag = 25},
-	aimingFullLow = {dict = "mech_weapons_thrown@base", name = "aimlive_l", flag = 25},
-	aimingFullMed = {dict = "mech_weapons_thrown@base", name = "aimlive_m", flag = 25},
-	aimingFullHigh = {dict = "mech_weapons_thrown@base", name = "aimlive_h", flag = 25},
-	throwingLow = {dict = "mech_weapons_thrown@base", name = "throw_l_fb_stand", flag = 2},
-	throwingMed = {dict = "mech_weapons_thrown@base", name = "throw_m_fb_stand", flag = 2},
-	throwingHigh = {dict = "mech_weapons_thrown@base", name = "throw_h_fb_stand", flag = 2},
-}
-
-local BallModels = {
-	["baseball"] = `s_baseball01x`,
-	["bocceballgreen"] = `p_bocceballgreen01x`,
-	["bocceballjack"] = `p_bocceballjack01x`,
-	["bocceballred"] = `p_bocceballred01x`,
-	["bone"] = `p_dogbone01x`,
-	["cannonball"] = `p_cannonball01x`,
-	["goatball"] = `mp004_p_goatball_02a`,
-	["horseshoe"] = `p_horseshoe01x`,
-	["jugglingball"] = `p_jugglingball01x`,
-	["lightbulb"] = `p_lightbulb01x`,
-	["shoe"] = `p_shoe01x`,
-	["snowball"] = `p_cs_snowball01x`,
-}
-
 local EquippedBall
 local CurrentAnimation
-local ActiveProjectile
 local KnockedDown
+
+local ActiveProjectiles = {}
 
 RegisterNetEvent("ball:hit")
 
@@ -66,30 +36,40 @@ function AttachBall(ball, ped)
 		false)
 end
 
-function EquipBall(model)
+function EquipBall(name)
 	if EquippedBall then
 		UnequipBall()
 	end
 
-	local ped = PlayerPedId()
+	local ballType = Config.Balls[name]
 
-	if not LoadModel(model) then
+	if not ballType then
 		return
 	end
 
-	local ball = CreateObject(model, 0.0, 0.0, 0.0, true, false, true, false, false)
+	local ped = PlayerPedId()
+
+	if not LoadModel(ballType.model) then
+		return
+	end
+
+	local ball = CreateObject(ballType.model, 0.0, 0.0, 0.0, true, false, true, false, false)
 
 	SetEntityLodDist(ball, 0xFFFF)
 
 	AttachBall(ball, ped)
 
-	EquippedBall = ball
+	EquippedBall = {
+		name = name,
+		handle = ball,
+		breakOnImpact = ballType.breakOnImpact
+	}
 
 	SetPlayerLockon(PlayerId(), false)
 end
 
 function UnequipBall()
-	DeleteObject(EquippedBall)
+	DeleteObject(EquippedBall.handle)
 	EquippedBall = nil
 
 	if CurrentAnimation then
@@ -157,10 +137,10 @@ function EnumeratePeds()
 	return EnumerateEntities(FindFirstPed, FindNextPed, EndFindPed)
 end
 
-function GetBallModelNames()
+function GetBallNames()
 	local names = {}
 
-	for name, hash in pairs(BallModels) do
+	for name, _ in pairs(Config.Balls) do
 		table.insert(names, name)
 	end
 
@@ -169,7 +149,7 @@ function GetBallModelNames()
 	return names
 end
 
-function RequestControl(entity)
+function RequestControl(entity, func)
 	NetworkRequestControlOfEntity(entity)
 
 	local timeWaited = 0
@@ -177,6 +157,10 @@ function RequestControl(entity)
 	while not NetworkHasControlOfEntity(entity) and timeWaited <= 500 do
 		Wait(1)
 		timeWaited = timeWaited + 1
+	end
+
+	if func then
+		func(entity)
 	end
 end
 
@@ -193,15 +177,19 @@ function GetPlayerFromPed(ped)
 	end
 end
 
+function IsPvpEnabled()
+	return GetRelationshipBetweenGroups(`PLAYER`, `PLAYER`) == 5
+end
+
 RegisterCommand("ball", function(source, args, raw)
 	if #args < 1 then
 		if EquippedBall then
 			UnequipBall()
 		else
-			EquipBall(BallModels["baseball"])
+			EquipBall("baseball")
 		end
 	else
-		EquipBall(BallModels[args[1]])
+		EquipBall(args[1])
 	end
 end)
 
@@ -217,7 +205,7 @@ end)
 
 AddEventHandler("ball:hit", function(ped, velocity)
 	if ped == -1 then
-		if GetRelationshipBetweenGroups(`PLAYER`, `PLAYER`) == 5 then
+		if IsPvpEnabled() then
 			ApplyBallHit(PlayerPedId(), velocity)
 			KnockedDown = GetSystemTime() + 3000
 		end
@@ -258,8 +246,8 @@ CreateThread(function()
 
 		if EquippedBall and not KnockedDown then
 			-- Re-attach ball if ped changes
-			if not IsEntityAttachedToEntity(EquippedBall, ped) then
-				AttachBall(EquippedBall, ped)
+			if not IsEntityAttachedToEntity(EquippedBall.handle, ped) then
+				AttachBall(EquippedBall.handle, ped)
 			end
 
 			-- Restart animation if interrupted
@@ -285,25 +273,25 @@ CreateThread(function()
 
 				if rot.x < -20.0 then
 					if timePressed > 1000 then
-						CurrentAnimation = Animations.aimingFullLow
+						CurrentAnimation = Config.Animations.aimingFullLow
 					else
-						CurrentAnimation = Animations.aimingLow
+						CurrentAnimation = Config.Animations.aimingLow
 					end
 
 					zangle = 5.0
 				elseif rot.x < 20.0 then
 					if timePressed > 1000 then
-						CurrentAnimation = Animations.aimingFullMed
+						CurrentAnimation = Config.Animations.aimingFullMed
 					else
-						CurrentAnimation = Animations.aimingMed
+						CurrentAnimation = Config.Animations.aimingMed
 					end
 					
 					zangle = 10.0
 				else
 					if timePressed > 1000 then
-						CurrentAnimation = Animations.aimingFullHigh
+						CurrentAnimation = Config.Animations.aimingFullHigh
 					else
-						CurrentAnimation = Animations.aimingHigh
+						CurrentAnimation = Config.Animations.aimingHigh
 					end
 
 					zangle = 15.0
@@ -319,14 +307,14 @@ CreateThread(function()
 					local throwingAnim
 
 					if timePressed > 1000 then
-						velocity = Velocity * 5
-						throwingAnim = Animations.throwingHigh
+						velocity = Config.BaseVelocity * 5
+						throwingAnim = Config.Animations.throwingHigh
 					elseif timePressed > 200 then
-						velocity = Velocity * 3
-						throwingAnim = Animations.throwingMed
+						velocity = Config.BaseVelocity * 3
+						throwingAnim = Config.Animations.throwingMed
 					else
-						velocity = Velocity
-						throwingAnim = Animations.throwingLow
+						velocity = Config.BaseVelocity
+						throwingAnim = Config.Animations.throwingLow
 					end
 
 					timeStartedPressing = nil
@@ -346,24 +334,26 @@ CreateThread(function()
 
 					-- Throw ball
 					ClearPedTasks(ped)
-					DetachEntity(EquippedBall)
-					SetEntityCoords(EquippedBall, GetOffsetFromEntityInWorldCoords(ped, 0.0, 1.0, 0.2))
-					SetEntityVelocity(EquippedBall, vx, vy, vz)
-					ActiveProjectile = EquippedBall
+					DetachEntity(EquippedBall.handle)
+					SetEntityCoords(EquippedBall.handle, GetOffsetFromEntityInWorldCoords(ped, 0.0, 1.0, 0.2))
+					SetEntityVelocity(EquippedBall.handle, vx, vy, vz)
+					ActiveProjectiles[EquippedBall.handle] = {
+						breakOnImpact = EquippedBall.breakOnImpact
+					}
 
 					-- Clean up and spawn a new ball in hand
-					local model = GetEntityModel(EquippedBall)
-					SetObjectAsNoLongerNeeded(EquippedBall)
-					EquippedBall = 0
-					EquipBall(model)
+					local model = GetEntityModel(EquippedBall.handle)
+					SetObjectAsNoLongerNeeded(EquippedBall.handle)
+					EquippedBall.handle = 0
+					EquipBall(EquippedBall.name)
 				end
 			else
 				timeStartedPressing = nil
 
 				if IsPedWalking(ped) then
-					CurrentAnimation = Animations.idleWalking
+					CurrentAnimation = Config.Animations.idleWalking
 				else
-					CurrentAnimation = Animations.idle
+					CurrentAnimation = Config.Animations.idle
 				end
 			end
 		end
@@ -374,30 +364,37 @@ end)
 
 CreateThread(function()
 	while true do
-		if ActiveProjectile and HasEntityCollidedWithAnything(ActiveProjectile) then
-			local velocity = GetEntityVelocity(ActiveProjectile)
+		for handle, data in pairs(ActiveProjectiles) do
+			if HasEntityCollidedWithAnything(handle) then
+				local velocity = GetEntityVelocity(handle)
 
-			for ped in EnumeratePeds() do
-				if IsEntityTouchingEntity(ActiveProjectile, ped) then
-					if IsPedAPlayer(ped) then
-						TriggerServerEvent("ball:hit", GetPlayerServerId(GetPlayerFromPed(ped)), -1, velocity)
-					elseif NetworkGetEntityIsNetworked(ped) then
-						if NetworkHasControlOfEntity(ped) then
-							ApplyBallHit(ped, velocity)
-						else
-							TriggerServerEvent("ball:hit", -1, PedToNet(ped), velocity)
+				for ped in EnumeratePeds() do
+					if IsEntityTouchingEntity(handle, ped) then
+						if IsPedAPlayer(ped) then
+							if IsPvpEnabled() then
+								TriggerServerEvent("ball:hit", GetPlayerServerId(GetPlayerFromPed(ped)), -1, velocity)
+							end
+						elseif NetworkGetEntityIsNetworked(ped) then
+							if NetworkHasControlOfEntity(ped) then
+								ApplyBallHit(ped, velocity)
+							else
+								TriggerServerEvent("ball:hit", -1, PedToNet(ped), velocity)
+							end
 						end
 					end
 				end
+
+				if data.breakOnImpact then
+					RequestControl(handle, DeleteObject)
+				elseif Config.ProjectileLifetime then
+					local ball = handle
+					SetTimeout(Config.ProjectileLifetime, function()
+						RequestControl(ball, DeleteObject)
+					end)
+				end
+
+				ActiveProjectiles[handle] = nil
 			end
-
-			local ball = ActiveProjectile
-			SetTimeout(10000, function()
-				RequestControl(ball)
-				DeleteObject(ball)
-			end)
-
-			ActiveProjectile = nil
 		end
 
 		Wait(0)
@@ -416,6 +413,6 @@ end)
 
 CreateThread(function()
 	TriggerEvent("chat:addSuggestion", "/ball", "Equip/Unequip a throwable ball", {
-		{name = "type", help = table.concat(GetBallModelNames(), ", ")}
+		{name = "type", help = table.concat(GetBallNames(), ", ")}
 	})
 end)
