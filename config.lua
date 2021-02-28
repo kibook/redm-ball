@@ -41,6 +41,10 @@ Config.Balls = {
 		model = `p_lightbulb01x`,
 		breakOnImpact = false
 	},
+	["rock"] = {
+		model = `p_rockthrow01x`,
+		breakOnImpact = false
+	},
 	["shoe"] = {
 		model = `p_shoe01x`,
 		breakOnImpact = false
