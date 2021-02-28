@@ -1,6 +1,10 @@
 Config = {}
 
 Config.Balls = {
+	["apple"] = {
+		model = `p_apple01x`,
+		breakOnImpact = false
+	},
 	["baseball"] = {
 		model = `s_baseball01x`,
 		breakOnImpact = false
@@ -41,6 +45,10 @@ Config.Balls = {
 		model = `p_lightbulb01x`,
 		breakOnImpact = false
 	},
+	["potato"] = {
+		model = `p_potato01x`,
+		breakOnImpact = false
+	},
 	["rock"] = {
 		model = `p_rockthrow01x`,
 		breakOnImpact = false
@@ -52,6 +60,10 @@ Config.Balls = {
 	["snowball"] = {
 		model = `p_cs_snowball01x`,
 		breakOnImpact = true
+	},
+	["tomato"] = {
+		model = `s_tomato01x`,
+		breakOnImpact = false
 	}
 }
 
