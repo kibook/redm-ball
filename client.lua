@@ -1,6 +1,5 @@
 local EquippedBall
 local CurrentAnimation
-local KnockedDown
 
 local ActiveProjectiles = {}
 
@@ -181,6 +180,10 @@ function IsPvpEnabled()
 	return GetRelationshipBetweenGroups(`PLAYER`, `PLAYER`) == 5
 end
 
+function CanThrowBall(ped)
+	return not (IsPedRagdoll(ped) or IsPedClimbing(ped))
+end
+
 RegisterCommand("ball", function(source, args, raw)
 	if #args < 1 then
 		if EquippedBall then
@@ -207,7 +210,6 @@ AddEventHandler("ball:hit", function(ped, velocity)
 	if ped == -1 then
 		if IsPvpEnabled() then
 			ApplyBallHit(PlayerPedId(), velocity)
-			KnockedDown = GetSystemTime() + 3000
 		end
 	else
 		ApplyBallHit(NetToPed(ped), velocity)
@@ -242,10 +244,10 @@ CreateThread(function()
 	local timeStartedPressing
 
 	while true do
-		local ped = PlayerPedId()
+		if EquippedBall then
+			local ped = PlayerPedId()
 
-		if EquippedBall and not KnockedDown then
-			-- Re-attach ball if ped changes
+			-- Re-attach ball if it becomes detached or ped changes
 			if not IsEntityAttachedToEntity(EquippedBall.handle, ped) then
 				AttachBall(EquippedBall.handle, ped)
 			end
@@ -257,7 +259,7 @@ CreateThread(function()
 				end
 			end
 
-			if IsControlPressed(0, `INPUT_AIM`) then
+			if IsControlPressed(0, `INPUT_AIM`) and CanThrowBall(ped) then
 				-- Determine how long the attack button has been pressed
 				local timePressed
 
@@ -398,16 +400,6 @@ CreateThread(function()
 		end
 
 		Wait(0)
-	end
-end)
-
-CreateThread(function()
-	while true do
-		if KnockedDown and GetSystemTime() > KnockedDown then
-			KnockedDown = nil
-		end
-
-		Wait(500)
 	end
 end)
 
