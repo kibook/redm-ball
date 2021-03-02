@@ -3,6 +3,8 @@ local CurrentAnimation
 
 local ActiveProjectiles = {}
 
+RegisterNetEvent("ball:equipBall")
+RegisterNetEvent("ball:unequipBall")
 RegisterNetEvent("ball:hit")
 
 function LoadModel(model)
@@ -35,7 +37,7 @@ function AttachBall(ball, ped)
 		false)
 end
 
-function EquipBall(name)
+function EquipBall(name, amount)
 	if EquippedBall then
 		UnequipBall()
 	end
@@ -61,13 +63,18 @@ function EquipBall(name)
 	EquippedBall = {
 		name = name,
 		handle = ball,
-		breakOnImpact = ballType.breakOnImpact
+		breakOnImpact = ballType.breakOnImpact,
+		amount = amount
 	}
 
 	SetPlayerLockon(PlayerId(), false)
 end
 
 function UnequipBall()
+	if not EquippedBall then
+		return
+	end
+
 	DeleteObject(EquippedBall.handle)
 	EquippedBall = nil
 
@@ -184,17 +191,8 @@ function CanThrowBall(ped)
 	return not (IsPedRagdoll(ped) or IsPedClimbing(ped))
 end
 
-RegisterCommand("ball", function(source, args, raw)
-	if #args < 1 then
-		if EquippedBall then
-			UnequipBall()
-		else
-			EquipBall("baseball")
-		end
-	else
-		EquipBall(args[1])
-	end
-end)
+exports("equipBall", EquipBall)
+exports("unequipBall", UnequipBall)
 
 AddEventHandler("onResourceStop", function(resourceName)
 	if GetCurrentResourceName() ~= resourceName then
@@ -205,6 +203,9 @@ AddEventHandler("onResourceStop", function(resourceName)
 		UnequipBall()
 	end
 end)
+
+AddEventHandler("ball:equipBall", EquipBall)
+AddEventHandler("ball:unequipBall", UnequipBall)
 
 AddEventHandler("ball:hit", function(ped, velocity)
 	if ped == -1 then
@@ -342,12 +343,23 @@ CreateThread(function()
 					ActiveProjectiles[EquippedBall.handle] = {
 						breakOnImpact = EquippedBall.breakOnImpact
 					}
+					TriggerEvent("ball:thrown", EquippedBall)
 
-					-- Clean up and spawn a new ball in hand
+					-- Clean up
 					local model = GetEntityModel(EquippedBall.handle)
 					SetObjectAsNoLongerNeeded(EquippedBall.handle)
 					EquippedBall.handle = 0
-					EquipBall(EquippedBall.name)
+
+					-- Spawn a new ball
+					if EquippedBall.amount then
+						if EquippedBall.amount > 1 then
+							EquipBall(EquippedBall.name, EquippedBall.amount - 1)
+						else
+							UnequipBall()
+						end
+					else
+						EquipBall(EquippedBall.name)
+					end
 				end
 			else
 				timeStartedPressing = nil
@@ -408,3 +420,17 @@ CreateThread(function()
 		{name = "type", help = table.concat(GetBallNames(), ", ")}
 	})
 end)
+
+if Config.EnableCommand then
+	RegisterCommand("ball", function(source, args, raw)
+		if #args < 1 then
+			if EquippedBall then
+				UnequipBall()
+			else
+				EquipBall(Config.DefaultBall)
+			end
+		else
+			EquipBall(args[1])
+		end
+	end)
+end

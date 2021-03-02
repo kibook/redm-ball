@@ -84,3 +84,7 @@ Config.Animations = {
 }
 
 Config.ProjectileLifetime = 10000
+
+Config.EnableCommand = true
+
+Config.DefaultBall = "baseball"
