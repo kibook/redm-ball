@@ -193,6 +193,7 @@ end
 
 exports("equipBall", EquipBall)
 exports("unequipBall", UnequipBall)
+exports("getBallNames", GetBallNames)
 
 AddEventHandler("onResourceStop", function(resourceName)
 	if GetCurrentResourceName() ~= resourceName then
