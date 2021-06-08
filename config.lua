@@ -45,6 +45,10 @@ Config.Balls = {
 		model = `p_lightbulb01x`,
 		breakOnImpact = false
 	},
+	["mango"] = {
+		model = `p_mango01x`,
+		breakOnImpact = false
+	},
 	["potato"] = {
 		model = `p_potato01x`,
 		breakOnImpact = false
